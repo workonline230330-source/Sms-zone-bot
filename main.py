@@ -134,6 +134,17 @@ def callback_listener(call):
         bot.send_message(user_id, "অ্যাকশন বাতিল করা হয়েছে।", reply_markup=main_menu())
 
 
-# বট রানিং করার ফাইনাল কোড
-print("Bot is starting successfully...")
-bot.infinity_polling()
+# Final configuration code
+import threading
+import os
+
+def run_bot():
+    bot.infinity_polling()
+
+if __name__ == "__main__":
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
