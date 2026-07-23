@@ -154,21 +154,30 @@ def check_otp(call):
     otp_text = f"📱 নাম্বার: `{phone_number}`\n\n📩 **সর্বশেষ প্রাপ্ত মেসেজ:**\n`{latest_sms}`"
     bot.send_message(call.message.chat.id, otp_text, parse_mode="Markdown", reply_markup=inline_markup)
 
-app = Flask('')
+import os
+import threading
+import time
+from flask import Flask
+
+app = Flask(__name__)
+
 @app.route('/')
-def home(): return "Online"
+def home():
+    return "Online"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-def run_bot():
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
-        except Exception as e:
-            print(f"Bot Polling Error: {e}")
-            time.sleep(5)
+# Flask ব্যাকগ্রাউন্ডে চালু করা এবং মেইন থ্রেডে বট চালানো
+flask_thread = threading.Thread(target=run_flask)
+flask_thread.daemon = True
+flask_thread.start()
 
-Thread(target=run_flask).start()
-Thread(target=run_bot).start()
+print("Bot is starting...")
+while True:
+    try:
+        bot.polling(none_stop=True)
+    except Exception as e:
+        print(f"Bot Polling Error: {e}")
+        time.sleep(5)
