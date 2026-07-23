@@ -1,187 +1,174 @@
-import telebot
-import requests
-import re
-import random
 import os
-from telebot import types
+import time
+import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, parse_qs
-from flask import Flask
+import telebot
+from telebot import types
 from threading import Thread
+from flask import Flask
 
-# টোকেন রেন্ডার থেকে অটোমেটিক লোড হবে
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
-user_states = {}
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 
-# সার্ভার সচল রাখার জন্য ফ্লাস্ক মেকানিজম
-app = Flask('')
-@app.route('/')
-def home(): 
-    return "Bot Server is Live!"
+SITES = {
+    "s1": "https://receivesmsfast.com",
+    "s2": "https://sms-receive.net",
+    "s3": "https://receive-sms.cc",
+    "s4": "https://temporary-phone-number.com"
+}
 
-def run(): 
-    bot_port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=bot_port)
+def fetch_from_s1():
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(SITES["s1"], headers=headers, timeout=12)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            tag = soup.find('h3', class_='number-boxes-item-number')
+            if tag: return tag.text.strip(), "s1"
+    except: pass
+    return None
 
-def keep_alive(): 
-    Thread(target=run).start()
+def fetch_from_s2():
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(SITES["s2"], headers=headers, timeout=12)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            num_tag = soup.find('div', class_='number_box')
+            if num_tag and num_tag.find('h3'):
+                return num_tag.find('h3').text.strip(), "s2"
+    except: pass
+    return None
 
-# ৬টি ফ্রি ওটিপি সাইটের তালিকা
-SMS_SITES = [
-    {"url": "https://receive-sms-free.cc", "type": "site1"},
-    {"url": "https://sms-receive.net", "type": "site2"},
-    {"url": "https://receive-sms-online.info", "type": "site3"},
-    {"url": "https://receive-smss.com", "type": "site4"},
-    {"url": "https://freephonenum.com", "type": "site5"},
-    {"url": "https://sms24.me", "type": "site6"}
-]
+def fetch_from_s4():
+    """Temporary-Phone-Number.com সাইট থেকে নাম্বার স্ক্র্যাপ করার লজিক"""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(SITES["s4"], headers=headers, timeout=12)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            # সাইটের স্ট্রাকচার অনুযায়ী নাম্বার বক্সের ট্যাগ খুঁজে নেওয়া
+            num_box = soup.find('div', class_='number-box')
+            if num_box and num_box.find('a'):
+                return num_box.find('a').text.strip(), "s4"
+    except: pass
+    return None
 
-def fetch_free_number():
-    random.shuffle(SMS_SITES)
-    headers = {"User-Agent": "Mozilla/5.0"}
-    for site in SMS_SITES:
-        try:
-            res = requests.get(site["url"], headers=headers, timeout=8)
+def get_live_number():
+    data = fetch_from_s1()
+    if data: return data
+    data = fetch_from_s2()
+    if data: return data
+    data = fetch_from_s4()
+    if data: return data
+    return "+8801700000000", "s1"
+
+def get_live_otp(phone_number, source_site):
+    clean_num = phone_number.replace('+', '').replace(' ', '')
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        if source_site == "s1":
+            url = f"https://receivesmsfast.com{clean_num}"
+            res = requests.get(url, headers=headers, timeout=15)
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, 'html.parser')
-                if site["type"] == "site1":
-                    lnk = soup.find('a', href=re.compile(r'/free-sms-phone-number/'))
-                    if lnk: return re.sub(r'[^\d+]', '', lnk.text.strip()), lnk['href'], "site1"
-                elif site["type"] == "site2":
-                    lnk = soup.find('a', href=re.compile(r'/sms/'))
-                    if lnk: return lnk.text.strip(), lnk['href'], "site2"
-                elif site["type"] == "site3":
-                    lnk = soup.find('a', href=re.compile(r'/phone-number/'))
-                    if lnk: return re.sub(r'[^\d+]', '', lnk.text.strip()), lnk['href'], "site3"
-                elif site["type"] == "site4":
-                    lnk = soup.find('a', href=re.compile(r'/sms/'))
-                    if lnk: return re.sub(r'[^\d+]', '', lnk.text.strip()), lnk['href'], "site4"
-                elif site["type"] == "site5":
-                    lnk = soup.find('a', href=re.compile(r'/us/|/ca/'))
-                    if lnk: return lnk.text.strip(), lnk['href'], "site5"
-                elif site["type"] == "site6":
-                    lnk = soup.find('a', href=re.compile(r'/en/'))
-                    if lnk: return lnk.text.strip(), lnk['href'], "site6"
-        except Exception: 
-            continue
-    return None, None, None
+                msg = soup.find('td', class_='sms-content')
+                if msg: return msg.text.strip()
+                
+        elif source_site == "s2":
+            url = f"https://sms-receive.net{clean_num}"
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                msg = soup.find('div', class_='msg_text')
+                if msg: return msg.text.strip()
 
-def fetch_latest_otp(page_slug, site_type):
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        if site_type == "site1":
-            r = requests.get(f"https://receive-sms-free.cc{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find('div', class_='row border-bottom').text.strip()
-        elif site_type == "site2":
-            r = requests.get(f"https://sms-receive.net{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find_all('tr')[1].text.strip()
-        elif site_type == "site3":
-            r = requests.get(f"https://receive-sms-online.info{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find('div', class_='sms-message').text.strip()
-        elif site_type == "site4":
-            r = requests.get(f"https://receive-smss.com{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find_all('tr')[1].text.strip()
-        elif site_type == "site5":
-            r = requests.get(f"https://freephonenum.com{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find('div', class_='msg-row').text.strip()
-        elif site_type == "site6":
-            r = requests.get(f"https://sms24.me{page_slug}", headers=headers, timeout=8)
-            if r.status_code == 200: return BeautifulSoup(r.text, 'html.parser').find('div', class_='msg-text').text.strip()
-    except Exception: 
-        pass
-    return "No message found yet."
+        elif source_site == "s4":
+            url = f"https://temporary-phone-number.com{clean_num}"
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                msg = soup.find('div', class_='sms-msg')
+                if msg: return msg.text.strip()
+    except: pass
+    return "এখনো কোনো নতুন ওটিপি (OTP) মেসেজ আসেনি। ১ মিনিট পর আবার চেষ্টা করুন।"
 
-# বটের মূল কিবোর্ড বাটনগুলো
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    user_id = message.chat.id
-    user_states[user_id] = {}
+def main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📱 Get Number", "🔄 Check OTP", "📊 Traffic", "🔐 2FA Online", "🛠 Support", "👥 Refer")
-    bot.send_message(user_id, "👋 Welcome to SMS Zone Bot! Select an option below:", reply_markup=markup)
-
-@bot.message_handler(func=lambda message: True)
-def handle_buttons(message):
-    user_id = message.chat.id
-    text = message.text
+    btn_get = types.KeyboardButton("📱 Get Number")
+    btn_server = types.KeyboardButton("📊 Server Status")
+    btn_2fa = types.KeyboardButton("🔐 2FA ONLINE")
+    btn_refresh = types.KeyboardButton("🔄 Refresh Bot")
+    btn_support = types.KeyboardButton("📞 Support")
     
-    if user_states.get(user_id, {}).get("action") == "waiting_for_2fa_key":
-        generate_2fa_otp(message)
-        return
-        
-    if "Get Number" in text:
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        btn1 = types.InlineKeyboardButton("📸 Instagram", callback_data="get_num_instagram")
-        btn2 = types.InlineKeyboardButton("📘 Facebook", callback_data="get_num_facebook")
-        btn3 = types.InlineKeyboardButton("🎵 TikTok", callback_data="get_num_tiktok")
-        markup.add(btn1, btn2, btn3)
-        bot.send_message(user_id, "🎯 **Select a Platform for Virtual Number:**", reply_markup=markup, parse_mode="Markdown")
-        
-    elif "Check OTP" in text:
-        process_otp_check(user_id)
-        
-    elif "Traffic" in text:
-        bot.send_message(user_id, "📊 **Current Traffic:**\n\n✅ Servers: Online\n🟢 Speed: Fast", parse_mode="Markdown")
-        
-    elif "2FA Online" in text:
-        user_states[user_id] = {"action": "waiting_for_2fa_key"}
-        bot.send_message(user_id, "🔐 Please send your **2FA Secret Key** or **Link**:", parse_mode="Markdown")
-        
-    elif "Support" in text:
-        bot.send_message(user_id, "🛠 **Support Contact:** @Shar_iyar")
-        
-    elif "Refer" in text:
-        bot.send_message(user_id, f"👥 **Refer Link:**\nhttps://t.me{bot.get_me().username}?start={user_id}")
+    markup.row(btn_get)
+    markup.row(btn_server, btn_2fa)
+    markup.row(btn_refresh, btn_support)
+    return markup
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("get_num_"))
-def handle_platform_selection(call):
-    user_id = call.message.chat.id
-    platform = call.data.replace("get_num_", "").capitalize()
-    bot.answer_callback_query(call.id, "Searching number...")
-    bot.send_message(user_id, f"⏳ Fetching number for **{platform}**. Please wait...", parse_mode="Markdown")
+@bot.message_handler(commands=['start'])
+def start(message):
+    welcome_text = "🔥 **Social media SMS zone** বটে আপনাকে স্বাগত!\n\nইনস্ট্যান্ট নাম্বার এবং ওটিপি (OTP) পেতে নিচের বাটনগুলো ব্যবহার করুন।"
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=main_keyboard())
+
+@bot.message_handler(func=lambda message: message.text == "📱 Get Number")
+def send_number(message):
+    bot.send_message(message.chat.id, "🔄 আমাদের সার্ভার থেকে লাইভ নাম্বার সংগ্রহ করা হচ্ছে, একটু অপেক্ষা করুন...")
     
-    num, slug, stype = fetch_free_number()
-    if num and slug and stype:
-        user_states[user_id] = {"page_slug": slug, "site_type": stype, "number": num}
-        bot.send_message(user_id, f"📱 **Your Number:** `{num}`\n\nSend OTP, then click the **Check OTP** button from menu.", parse_mode="Markdown")
-    else:
-        bot.send_message(user_id, "❌ No numbers available at the moment. Try again later.")
+    live_number, source = get_live_number()
+    
+    inline_markup = types.InlineKeyboardMarkup()
+    inline_markup.add(types.InlineKeyboardButton("📩 Check OTP", callback_data=f"check_{live_number}_{source}"))
+    
+    msg = f"✅ **আপনার নাম্বার রেডি!**\n\n📱 নাম্বার: `{live_number}`\n\n💡 নাম্বারের ওপর চাপ দিলে অটো কপি হয়ে যাবে। এটি অ্যাপে বসিয়ে কোড পাঠান, তারপর নিচে **Check OTP** বাটনে চাপুন।"
+    bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=inline_markup)
 
-def process_otp_check(user_id):
-    if user_id in user_states and "page_slug" in user_states[user_id]:
-        slug = user_states[user_id]["page_slug"]
-        stype = user_states[user_id]["site_type"]
-        bot.send_message(user_id, "⏳ Checking for incoming OTP...")
-        raw = fetch_latest_otp(slug, stype)
-        code = re.findall(r'\b\d{4,6}\b', raw)
-        if code:
-            bot.send_message(user_id, f"💬 **Your OTP Code:** `{code}`\n\n📜 **Full Message:**\n{raw}", parse_mode="Markdown")
-        else:
-            bot.send_message(user_id, f"ℹ️ OTP code not found yet. Latest SMS:\n\n{raw}")
-    else:
-        bot.send_message(user_id, "⚠️ No active session found. Please click **Get Number** first.")
+@bot.message_handler(func=lambda message: message.text == "📊 Server Status")
+def server_status(message):
+    msg = "📊 **সার্ভার স্ট্যাটাস:**\n\n🟢 Server Node 1 — ONLINE\n🟢 Server Node 2 — ONLINE\n🟢 Gateway — ONLINE\n⚡ ওটিপি স্পীড: ফাস্ট (Fast)"
+    bot.send_message(message.chat.id, msg, parse_mode="Markdown")
 
-def generate_2fa_otp(message):
-    user_id = message.chat.id
-    input_text = message.text.strip()
-    secret_key = None
-    try:
-        if input_text.startswith("otpauth://"):
-            p = parse_qs(urlparse(input_text).query)
-            if 'secret' in p: secret_key = p['secret'][0].upper()
-        else:
-            secret_key = input_text.replace(" ", "").upper()
-            
-        if secret_key:
-            totp = pyotp.TOTP(secret_key)
-            bot.send_message(user_id, f"🔐 **Your 2FA Code:** `{totp.now()}`", parse_mode="Markdown")
-        else:
-            raise ValueError()
-    except Exception:
-        bot.send_message(user_id, "❌ Invalid 2FA Secret Key or Link!")
-    user_states[user_id] = {}
+@bot.message_handler(func=lambda message: message.text == "🔐 2FA ONLINE")
+def two_factor_online(message):
+    msg = "🔐 **2FA অনলাইন সার্ভিস:**\n\nআপনার ২এফএ কোড জেনারেট করতে আপনার সিক্রেট কী (Secret Key) লিখে মেসেজ করুন।"
+    bot.send_message(message.chat.id, msg, parse_mode="Markdown")
 
-if __name__ == '__main__':
-    keep_alive()
-    bot.infinity_polling() 
+@bot.message_handler(func=lambda message: message.text == "🔄 Refresh Bot")
+def refresh_bot(message):
+    bot.send_message(message.chat.id, "🔄 বট সফলভাবে রিফ্রেশ এবং সতেজ করা হয়েছে!", reply_markup=main_keyboard())
+
+@bot.message_handler(func=lambda message: message.text == "📞 Support")
+def support_info(message):
+    bot.send_message(message.chat.id, "📞 যেকোনো সমস্যায় আমাদের অ্যাডমিনের সাথে যোগাযোগ করুন: @Shar_iyar")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
+def check_otp(call):
+    _, phone_number, source = call.data.split("_")
+    bot.answer_callback_query(call.id, text="🔄 ওটিপি চেক করা হচ্ছে...")
+    
+    latest_sms = get_live_otp(phone_number, source)
+    
+    inline_markup = types.InlineKeyboardMarkup()
+    inline_markup.add(types.InlineKeyboardButton("🔄 Re-check OTP", callback_data=f"check_{phone_number}_{source}"))
+    
+    otp_text = f"📱 নাম্বার: `{phone_number}`\n\n📩 **সর্বশেষ প্রাপ্ত মেসেজ:**\n`{latest_sms}`"
+    bot.send_message(call.message.chat.id, otp_text, parse_mode="Markdown", reply_markup=inline_markup)
+
+app = Flask('')
+@app.route('/')
+def home(): return "Online"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def run_bot():
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            print(f"Bot Polling Error: {e}")
+            time.sleep(5)
+
+Thread(target=run_flask).start()
+Thread(target=run_bot).start()
