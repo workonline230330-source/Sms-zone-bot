@@ -2,7 +2,6 @@ import telebot
 import requests
 import re
 import random
-import pyotp
 import os
 from telebot import types
 from bs4 import BeautifulSoup
@@ -11,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # টোকেন রেন্ডার থেকে অটোমেটিক লোড হবে
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 user_states = {}
 
