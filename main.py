@@ -141,19 +141,45 @@ def refresh_bot(message):
 def support_info(message):
     bot.send_message(message.chat.id, "📞 যেকোনো সমস্যায় আমাদের অ্যাডমিনের সাথে যোগাযোগ করুন: @Shar_iyar")
 
+import re
+def get_live_otp(phone_number, source_site):
+    headers = {'UsereAgent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    clean_number = phone_number.replace("+", "").strip()
+    
+    url_map = {
+        "https://receivesmsfast.com": f"https://receivesmsfast.com{clean_number}",
+        "https://sms-receive.net": f"https://sms-receive.net{clean_number}",
+        "https://receive-sms.cc": f"https://receive-sms.cc{clean_number}",
+        "https://temporary-phone-number.com": f"https://temporary-phone-number.com{clean_number}"
+    }
+    
+    url = url_map.get(source_site, f"https://receivesmsfast.com{clean_number}")
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            page_text = soup.get_text()
+            otp_match = re.search(r'\b\d{4,6}\b', page_text)
+            if otp_match:
+                detected_code = otp_match.group(0)
+                return f"📩 **সর্বশেষ প্রাপ্ত ওটিপি কোড:** `{detected_code}`"
+    except Exception as e:
+        print(f"OTP Scraping Error: {e}")
+        
+    return "❌ এখনো কোনো নতুন ওটিপি (OTP) মেসেজ আসেনি।"
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def check_otp(call):
     _, phone_number, source = call.data.split("_")
-    bot.answer_callback_query(call.id, text="🔄 ওটিপি চেক করা হচ্ছে...")
+    bot.answer_callback_query(call.id, text="ওটিপি চেক করা হচ্ছে...")
     
     latest_sms = get_live_otp(phone_number, source)
     
     inline_markup = types.InlineKeyboardMarkup()
     inline_markup.add(types.InlineKeyboardButton("🔄 Re-check OTP", callback_data=f"check_{phone_number}_{source}"))
     
-    otp_text = f"📱 নাম্বার: `{phone_number}`\n\n📩 **সর্বশেষ প্রাপ্ত মেসেজ:**\n`{latest_sms}`"
-    bot.send_message(call.message.chat.id, otp_text, parse_mode="Markdown", reply_markup=inline_markup)
-
+    bot.send_message(call.message.chat.id, latest_sms, reply_markup=inline_markup)
 import os
 import threading
 import time
