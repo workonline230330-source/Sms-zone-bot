@@ -10,11 +10,11 @@ from flask import Flask
 from threading import Thread
 import os
 
-# আপনার বটের আসল টোকেনটি এখানে বসান
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")"
+# Render এর Environment Variable থেকে টোকেনটি নেওয়া হচ্ছে
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ইউজারের ডাটা এবং স্টেট ধরে রাখার ডিকশনারি
+# ইউজারের ডাটা এবং স্টেট ধরে রাখার জন্য খালি ডিকশনারি (এটি অত্যন্ত জরুরি)
 user_states = {}
 
 # ----------------- FLASK SERVER (FOR UPTIME ROBOT) -----------------
@@ -55,32 +55,32 @@ def fetch_free_number():
                 if site["type"] == "site1":
                     links = soup.find_all('a', href=re.compile(r'/free-sms-phone-number/'))
                     if links:
-                        return re.sub(r'[^\d+]', '', links.text.strip()), links['href'], "site1"
+                        return re.sub(r'[^\d+]', '', links[0].text.strip()), links[0]['href'], "site1"
                         
                 elif site["type"] == "site2":
                     links = soup.find_all('a', href=re.compile(r'/sms/'))
                     if links:
-                        return links.text.strip(), links['href'], "site2"
+                        return links[0].text.strip(), links[0]['href'], "site2"
                         
                 elif site["type"] == "site3":
                     links = soup.find_all('a', href=re.compile(r'/phone-number/'))
                     if links:
-                        return re.sub(r'[^\d+]', '', links.text.strip()), links['href'], "site3"
+                        return re.sub(r'[^\d+]', '', links[0].text.strip()), links[0]['href'], "site3"
                         
                 elif site["type"] == "site4":
                     links = soup.find_all('a', href=re.compile(r'/sms/'))
                     if links:
-                        return re.sub(r'[^\d+]', '', links.text.strip()), links['href'], "site4"
+                        return re.sub(r'[^\d+]', '', links[0].text.strip()), links[0]['href'], "site4"
                         
                 elif site["type"] == "site5":
                     links = soup.find_all('a', href=re.compile(r'/us/|/ca/'))
                     if links:
-                        return links.text.strip(), links['href'], "site5"
+                        return links[0].text.strip(), links[0]['href'], "site5"
                         
                 elif site["type"] == "site6":
                     links = soup.find_all('a', href=re.compile(r'/en/'))
                     if links:
-                        return links.text.strip(), links['href'], "site6"
+                        return links[0].text.strip(), links[0]['href'], "site6"
         except Exception:
             continue
             
@@ -101,7 +101,7 @@ def fetch_latest_otp(page_slug, site_type):
             res = requests.get(url, headers=headers, timeout=8)
             if res.status_code == 200:
                 rows = BeautifulSoup(res.text, 'html.parser').find_all('tr')
-                return rows.text.strip() if len(rows) > 1 else "No messages found"
+                return rows[0].text.strip() if len(rows) > 0 else "No messages found"
                     
         elif site_type == "site3":
             url = f"https://receive-sms-online.info{page_slug}"
@@ -115,7 +115,7 @@ def fetch_latest_otp(page_slug, site_type):
             res = requests.get(url, headers=headers, timeout=8)
             if res.status_code == 200:
                 rows = BeautifulSoup(res.text, 'html.parser').find_all('tr')
-                return rows.text.strip() if len(rows) > 1 else "No messages found"
+                return rows[0].text.strip() if len(rows) > 0 else "No messages found"
                 
         elif site_type == "site5":
             url = f"https://freephonenum.com{page_slug}"
@@ -140,7 +140,7 @@ def fetch_latest_otp(page_slug, site_type):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
-    user_states[user_id] = {}
+    user_states[user_id] = {} # সেশন ক্লিয়ার
     
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn1 = types.KeyboardButton("📱 Get Number")
@@ -158,6 +158,7 @@ def handle_buttons(message):
     user_id = message.chat.id
     text = message.text
 
+    # ২এফএ কি এর জন্য অপেক্ষা করলে এই টেক্সট প্রোসেস হবে
     if user_states.get(user_id, {}).get("action") == "waiting_for_2fa_key":
         generate_2fa_otp(message)
         return
@@ -195,14 +196,13 @@ def handle_platform_selection(call):
     user_id = call.message.chat.id
     platform = call.data.replace("get_number_", "").capitalize()
     
-    bot.answer_callback_query(call.id, f"Finding key for {platform}...")
+    bot.answer_callback_query(call.id, f"Finding number for {platform}...")
     bot.send_message(user_id, f"⏳ Fetching a free virtual number for **{platform}**. Please wait...", parse_mode="Markdown")
     
     number, page_slug, site_type = fetch_free_number()
     
     if number and page_slug and site_type:
         user_states[user_id] = {"page_slug": page_slug, "site_type": site_type, "number": number, "platform": platform}
-        
         bot.send_message(user_id, f"📱 **Your Number for {platform}:** `{number}`\n\nSend your OTP to this number, then click the **Check OTP** button from the menu.", parse_mode="Markdown")
     else:
         bot.send_message(user_id, f"❌ Sorry, no free numbers available for **{platform}** at the moment. Please try again later.", parse_mode="Markdown")
@@ -215,11 +215,46 @@ def process_otp_check(user_id):
         
         bot.send_message(user_id, f"⏳ Checking for latest OTP on `{current_num}`...")
         raw_message = fetch_latest_otp(page_slug, site_type)
-        
         otp_code = re.findall(r'\b\d{4,6}\b', raw_message)
         
-        if otp_code:
+                if otp_code:
             bot.send_message(user_id, f"💬 **Your OTP Code:** `{otp_code}`\n\n📜 **Full Message:**\n{raw_message}", parse_mode="Markdown")
         else:
             bot.send_message(user_id, f"ℹ️ No specific OTP code found yet. Latest message:\n\n{raw_message}")
-else:
+    else:
+        bot.send_message(user_id, "⚠️ No active session found. Please click **Get Number** first.")
+
+def generate_2fa_otp(message):
+    user_id = message.chat.id
+    input_text = message.text.strip()
+    secret_key = None
+    
+    try:
+        if input_text.startswith("otpauth://"):
+            parsed_url = urlparse(input_text)
+            query_params = parse_qs(parsed_url.query)
+            if 'secret' in query_params:
+                secret_key = query_params['secret'].upper()
+            else:
+                raise ValueError()
+        else:
+            secret_key = input_text.replace(" ", "").upper()
+        
+        if secret_key:
+            totp = pyotp.TOTP(secret_key)
+            current_otp = totp.now()
+            time_remaining = totp.interval - (totp.timecode(totp.time_provider.time()) % totp.interval)
+            
+            bot.send_message(user_id, f"🔐 **Your 2FA OTP Code:** `{current_otp}`\n\n⏳ Valid for another {int(time_remaining)} seconds.", parse_mode="Markdown")
+        else:
+            raise ValueError()
+    except Exception:
+        bot.send_message(user_id, "❌ Invalid 2FA Secret Key or Link! Please check and try again.")
+    
+    user_states[user_id] = {}
+
+# ----------------- MAIN RUN CONTEXT -----------------
+if __name__ == '__main__':
+    keep_alive()
+    print("Bot is starting...")
+    bot.infinity_polling()
