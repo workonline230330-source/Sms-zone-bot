@@ -1,4 +1,4 @@
 flask
-pyTelegramBotAPI
+pytelegrambotapi
 pyotp
 beautifulsoup4
