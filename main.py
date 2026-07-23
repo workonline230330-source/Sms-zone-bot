@@ -3,6 +3,7 @@ import threading
 import time
 import re
 import requests
+import random
 from bs4 import BeautifulSoup
 import telebot
 from telebot import types
@@ -12,7 +13,7 @@ from flask import Flask
 API_TOKEN = os.environ.get("BOT_TOKEN") 
 bot = telebot.TeleBot(API_TOKEN)
 
-# ২. ফ্রি নম্বর সাইটের তালিকা (যেকোনো দেশের নম্বরের জন্য)
+# ২. ফ্রি নম্বর সাইটের তালিকা
 SITES = {
     "s1": "https://receivesmsfast.com",
     "s2": "https://sms-receive.net",
@@ -20,22 +21,28 @@ SITES = {
     "s4": "https://temporary-phone-number.com"
 }
 
-# ৩. ওয়েবসাইট থেকে যেকোনো দেশের আসল নম্বর স্ক্র্যাপ করার ফাংশন
+# ৩. ওয়েবসাইট থেকে যেকোনো দেশের নম্বর এলোমেলোভাবে (Random) সংগ্রহ করার ফাংশন
 def fetch_any_live_number():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    for site_key, url in SITES.items():
+    
+    site_keys = list(SITES.keys())
+    random.shuffle(site_keys)
+    
+    for site_key in site_keys:
+        url = SITES[site_key]
         try:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-                # আন্তর্জাতিক ফরম্যাটের মোবাইল নম্বর খোঁজার রেগুলার এক্সপ্রেশন প্যাটার্ন (+ সহ বা ছাড়া)
                 numbers = re.findall(r'\+?\d{10,15}', soup.get_text())
-                for num in numbers:
-                    # ডামি বা ফেক ধারাবাহিক ০ এবং ১ বিশিষ্ট নম্বর ফিল্টার করা
-                    if "000000" not in num and "111111" not in num:
-                        if not num.startswith('+'):
-                            num = '+' + num
-                        return num, site_key
+                
+                valid_numbers = [num for num in numbers if "000000" not in num and "111111" not in num]
+                
+                if valid_numbers:
+                    chosen_num = random.choice(valid_numbers)
+                    if not chosen_num.startswith('+'):
+                        chosen_num = '+' + chosen_num
+                    return chosen_num, site_key
         except:
             continue
     return None, None
@@ -68,7 +75,7 @@ def get_live_otp(phone_number, site_key):
         
     return "❌ এখনো কোনো নতুন ওটিপি (OTP) মেসেজ আসেনি।"
 
-# ৫. টেলিগ্রাম বটের কমান্ড হ্যান্ডলারসমূহ (সব বাটনসহ)
+# ৫. টেলিগ্রাম বটের কমান্ড হ্যান্ডলারসমূহ
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -111,30 +118,24 @@ def get_number_handler(message):
         reply_text = (
             f"✅ **আপনার নাম্বার রেডি!**\n\n"
             f"📱 **নাম্বার:** `{real_number}`\n\n"
-            f"💡 নাম্বারের ওপর চাপ দিলে অটো কপি হয়ে যাবে। এটি অ্যাপে বসিয়ে কোড পাঠান, তারপর নিচে Check OTP বাটনে চাপুন।"
+            f"💡 ওপরের নাম্বারের ওপর চাপ দিলে অটো কপি হয়ে যাবে। এটি অ্যাপে বসিয়ে কোড পাঠান, তারপর নিচে Check OTP বাটন চাপুন।"
         )
         inline_markup = types.InlineKeyboardMarkup()
         inline_markup.add(types.InlineKeyboardButton("📩 Check OTP", callback_data=f"check_{real_number}_{site_key}"))
-        bot.send_message(message.chat.id, reply_text, reply_markup=inline_markup)
+        bot.send_message(message.chat.id, reply_text, reply_markup=inline_markup, parse_mode="Markdown")
     else:
         bot.send_message(message.chat.id, "❌ দুঃখিত, এই মুহূর্তে ফ্রি ওয়েবসাইটগুলোতে কোনো সচল নম্বর পাওয়া যায়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def check_otp(call):
     _, phone_number, site_key = call.data.split("_")
-        if real_number:
-        # নম্বরের দুই পাশে ` চিহ্ন ব্যবহার করে টেলিগ্রামে অটো-কপি সচল করা হয়েছে
-        reply_text = (
-            f"✅ **আপনার নাম্বার রেডি!**\n\n"
-            f"📱 **নাম্বার:** `{real_number}`\n\n"
-            f"💡 ওপরের নাম্বারের ওপর চাপ দিলে অটো কপি হয়ে যাবে। এটি অ্যাপে বসিয়ে কোড পাঠান, তারপর নিচে Check OTP বাটন চাপুন।"
-        )
-        inline_markup = types.InlineKeyboardMarkup()
-        inline_markup.add(types.InlineKeyboardButton("📩 Check OTP", callback_data=f"check_{real_number}_{site_key}"))
-        
-        # এখানে parse_mode="Markdown" যুক্ত করা আবশ্যক, তা না হলে অটো-কপি কাজ করবে না
-        bot.send_message(message.chat.id, reply_text, reply_markup=inline_markup, parse_mode="Markdown")
-
+    bot.answer_callback_query(call.id, text="ওটিপি চেক করা হচ্ছে...")
+    
+    latest_sms = get_live_otp(phone_number, site_key)
+    
+    inline_markup = types.InlineKeyboardMarkup()
+    inline_markup.add(types.InlineKeyboardButton("🔄 Re-check OTP", callback_data=f"check_{phone_number}_{site_key}"))
+    
     bot.send_message(call.message.chat.id, latest_sms, reply_markup=inline_markup)
 
 # ৬. রেন্ডার সার্ভার সচল রাখার জন্য Flask ওয়েব সার্ভার
