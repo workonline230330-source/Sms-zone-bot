@@ -185,4 +185,4 @@ def generate_2fa_otp(message):
 
 if __name__ == '__main__':
     keep_alive()
-    bot.infinity_polling()
+    bot.infinity_polling() 
