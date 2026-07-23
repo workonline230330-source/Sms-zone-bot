@@ -122,13 +122,19 @@ def get_number_handler(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def check_otp(call):
     _, phone_number, site_key = call.data.split("_")
-    bot.answer_callback_query(call.id, text="ওটিপি চেক করা হচ্ছে...")
-    
-    latest_sms = get_live_otp(phone_number, site_key)
-    
-    inline_markup = types.InlineKeyboardMarkup()
-    inline_markup.add(types.InlineKeyboardButton("🔄 Re-check OTP", callback_data=f"check_{phone_number}_{site_key}"))
-    
+        if real_number:
+        # নম্বরের দুই পাশে ` চিহ্ন ব্যবহার করে টেলিগ্রামে অটো-কপি সচল করা হয়েছে
+        reply_text = (
+            f"✅ **আপনার নাম্বার রেডি!**\n\n"
+            f"📱 **নাম্বার:** `{real_number}`\n\n"
+            f"💡 ওপরের নাম্বারের ওপর চাপ দিলে অটো কপি হয়ে যাবে। এটি অ্যাপে বসিয়ে কোড পাঠান, তারপর নিচে Check OTP বাটন চাপুন।"
+        )
+        inline_markup = types.InlineKeyboardMarkup()
+        inline_markup.add(types.InlineKeyboardButton("📩 Check OTP", callback_data=f"check_{real_number}_{site_key}"))
+        
+        # এখানে parse_mode="Markdown" যুক্ত করা আবশ্যক, তা না হলে অটো-কপি কাজ করবে না
+        bot.send_message(message.chat.id, reply_text, reply_markup=inline_markup, parse_mode="Markdown")
+
     bot.send_message(call.message.chat.id, latest_sms, reply_markup=inline_markup)
 
 # ৬. রেন্ডার সার্ভার সচল রাখার জন্য Flask ওয়েব সার্ভার
