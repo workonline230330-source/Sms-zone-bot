@@ -142,18 +142,19 @@ def support_info(message):
     bot.send_message(message.chat.id, "📞 যেকোনো সমস্যায় আমাদের অ্যাডমিনের সাথে যোগাযোগ করুন: @Shar_iyar")
 
 import re
-def get_live_otp(phone_number, source_site):
-    headers = {'UsereAgent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+def get_live_otp(phone_number, site_key):
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     clean_number = phone_number.replace("+", "").strip()
     
-    url_map = {
-        "https://receivesmsfast.com": f"https://receivesmsfast.com{clean_number}",
-        "https://sms-receive.net": f"https://sms-receive.net{clean_number}",
-        "https://receive-sms.cc": f"https://receive-sms.cc{clean_number}",
-        "https://temporary-phone-number.com": f"https://temporary-phone-number.com{clean_number}"
+    # লম্বা লিঙ্কের বদলে আমরা শুধু ছোট কোড (s1, s2) ব্যবহার করব
+            url_map = {
+        "s1": f"https://receivesmsfast.com{clean_number}",
+        "s2": f"https://sms-receive.net{clean_number}",
+        "s3": f"https://receive-sms.cc{clean_number}",
+        "s4": f"https://temporary-phone-number{clean_number}"
     }
-    
-    url = url_map.get(source_site, f"https://receivesmsfast.com{clean_number}")
+
+    url = url_map.get(site_key, f"https://receivesmsfast.com{clean_number}")
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -168,6 +169,7 @@ def get_live_otp(phone_number, source_site):
         print(f"OTP Scraping Error: {e}")
         
     return "❌ এখনো কোনো নতুন ওটিপি (OTP) মেসেজ আসেনি।"
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def check_otp(call):
